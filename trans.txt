@@ -1,0 +1,6 @@
+/usr/src/tensorrt/bin/trtexec \
+--onnx=yolov8n-pose.onnx \
+--saveEngine=yolov8n-pose.engine \
+--int8
+
+
