@@ -1,2 +1,4 @@
 build
 engine
+data
+camera/MVSDK/libMVSDK.so
