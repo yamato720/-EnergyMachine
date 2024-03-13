@@ -7,6 +7,7 @@
 #include "NvInferPlugin.h"
 #include "common.hpp"
 #include "fstream"
+#include "obj.hpp"
 
 using namespace pose;
 
@@ -33,7 +34,8 @@ public:
                              const std::vector<Object>&                    objs,
                              const std::vector<std::vector<unsigned int>>& SKELETON,
                              const std::vector<std::vector<unsigned int>>& KPS_COLORS,
-                             const std::vector<std::vector<unsigned int>>& LIMB_COLORS);
+                             const std::vector<std::vector<unsigned int>>& LIMB_COLORS,
+                             Tracker &Tk); 
 
     int                  num_bindings;
     int                  num_inputs  = 0;
@@ -251,12 +253,18 @@ void YOLOv8_pose::postprocess(std::vector<Object>& objs, float score_thres, floa
     output         = output.t();
     for (int i = 0; i < num_anchors; i++) {
         auto row_ptr    = output.row(i).ptr<float>();
-        auto bboxes_ptr = row_ptr;
+        // 18 = 4 box, 4 label, 5*2 points
+        auto bboxes_ptr = row_ptr;  
         auto scores_ptr = row_ptr + 4;
-        auto kps_ptr    = row_ptr + 5;
+        auto kps_ptr    = row_ptr + 8;
 
         float score = *scores_ptr;
-        if (score > score_thres) {
+        
+        for(int j = 0; j < 4; j++, scores_ptr++)
+        {
+            float score = *scores_ptr;
+            if (score > score_thres) 
+            {
             float x = *bboxes_ptr++ - dw;
             float y = *bboxes_ptr++ - dh;
             float w = *bboxes_ptr++;
@@ -273,24 +281,27 @@ void YOLOv8_pose::postprocess(std::vector<Object>& objs, float score_thres, floa
             bbox.width  = x1 - x0;
             bbox.height = y1 - y0;
             std::vector<float> kps;
-            for (int k = 0; k < 17; k++) {
-                float kps_x = (*(kps_ptr + 3 * k) - dw) * ratio;
-                float kps_y = (*(kps_ptr + 3 * k + 1) - dh) * ratio;
-                float kps_s = *(kps_ptr + 3 * k + 2);
+            for (int k = 0; k < 5; k++) {
+                float kps_x = (*(kps_ptr + 2 * k) - dw) * ratio;
+                float kps_y = (*(kps_ptr + 2 * k + 1) - dh) * ratio;
+                // float kps_s = *(kps_ptr + 3 * k + 2);
                 kps_x       = clamp(kps_x, 0.f, width);
                 kps_y       = clamp(kps_y, 0.f, height);
                 kps.push_back(kps_x);
                 kps.push_back(kps_y);
-                kps.push_back(kps_s);
+                // kps.push_back(kps_s);
             }
 
             bboxes.push_back(bbox);
-            labels.push_back(0);
+            labels.push_back(j);
             scores.push_back(score);
             kpss.push_back(kps);
+            }
         }
+        
     }
-
+// cv::dnn::NMSBoxesBatched(bboxes, scores, labels, score_thres, iou_thres, indices);
+// #define BATCHED_NMS
 #ifdef BATCHED_NMS
     cv::dnn::NMSBoxesBatched(bboxes, scores, labels, score_thres, iou_thres, indices);
 #else
@@ -317,7 +328,8 @@ void YOLOv8_pose::draw_objects(const cv::Mat&                                ima
                                const std::vector<Object>&                    objs,
                                const std::vector<std::vector<unsigned int>>& SKELETON,
                                const std::vector<std::vector<unsigned int>>& KPS_COLORS,
-                               const std::vector<std::vector<unsigned int>>& LIMB_COLORS)
+                               const std::vector<std::vector<unsigned int>>& LIMB_COLORS,
+                               Tracker &Tk)// store blades
 {
     res                 = image.clone();
     const int num_point = 5; // in  , 2, 3
@@ -325,7 +337,26 @@ void YOLOv8_pose::draw_objects(const cv::Mat&                                ima
         cv::rectangle(res, obj.rect, {0, 0, 255}, 2);
 
         char text[256];
-        sprintf(text, "person %.1f%%", obj.prob * 100);
+        switch (obj.label)
+        {
+        case 0:
+            sprintf(text, "red_hitting %.1f%%", obj.prob * 100);
+            break;
+        case 1:
+            sprintf(text, "red_hit %.1f%%", obj.prob * 100);
+            break;
+        case 2:
+            sprintf(text, "blue_hitting %.1f%%", obj.prob * 100);
+            break;
+        case 3:
+            sprintf(text, "blue_hit %.1f%%", obj.prob * 100);
+            break;
+        default:
+            sprintf(text, "Error type!");
+            break;
+        }
+        // printf("%d\n", obj.label);
+        
 
         int      baseLine   = 0;
         cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.4, 1, &baseLine);
@@ -341,33 +372,49 @@ void YOLOv8_pose::draw_objects(const cv::Mat&                                ima
         cv::putText(res, text, cv::Point(x, y + label_size.height), cv::FONT_HERSHEY_SIMPLEX, 0.4, {255, 255, 255}, 1);
 
         auto& kps = obj.kps;
-        // printf("%f\t%f\t%f\n", kps[0], kps[1], kps[2]);
-        for (int k = 0; k < 5; k++) {
-            if (k < num_point) {
-                int   kps_x = std::round(kps[k * 3]);
-                int   kps_y = std::round(kps[k * 3 + 1]);
-                float kps_s = kps[k * 3 + 2];
-                if (kps_s > 0.5f) {
-                    cv::Scalar kps_color = cv::Scalar(KPS_COLORS[k][0], KPS_COLORS[k][1], KPS_COLORS[k][2]);
-                    cv::circle(res, {kps_x, kps_y}, 5, kps_color, -1);
-                    // printf("%f\t%f\t%f\n", kps[0], kps[1], kps[2]);
-                }
-            }
-            auto& ske    = SKELETON[k];
-            int   pos1_x = std::round(kps[(ske[0] ) * 3]);
-            int   pos1_y = std::round(kps[(ske[0] ) * 3 + 1]);
-
-            int pos2_x = std::round(kps[(ske[1] ) * 3]);
-            int pos2_y = std::round(kps[(ske[1] ) * 3 + 1]);
-
-            float pos1_s = kps[(ske[0] ) * 3 + 2];
-            float pos2_s = kps[(ske[1] ) * 3 + 2];
-
-            if (pos1_s > 0.5f && pos2_s > 0.5f) {
-                cv::Scalar limb_color = cv::Scalar(LIMB_COLORS[k][0], LIMB_COLORS[k][1], LIMB_COLORS[k][2]);
-                cv::line(res, {pos1_x, pos1_y}, {pos2_x, pos2_y}, limb_color, 2);
-            }
+        if(obj.label==0||obj.label==2)
+        {
+            Tk.getdate(obj.rect, kps);
+            Tk.draw_res(res, obj.rect, kps);
         }
+        
+        // printf("%f\t%f\t%f\n", kps[0], kps[1], kps[2]);
+        // for (int k = 0; k < num_point; k++) {
+            
+        //     int   kps_x = std::round(kps[k * 2]);
+        //     int   kps_y = std::round(kps[k * 2 + 1]);
+        //     // float kps_s = kps[k * 3 + 2];
+        //     // if (kps_s > 0.5f) {
+        //     cv::Scalar kps_color = cv::Scalar(KPS_COLORS[k][0], KPS_COLORS[k][1], KPS_COLORS[k][2]);
+        //     cv::circle(res, {kps_x, kps_y}, 5, kps_color, -1);
+        //     //     // printf("%f\t%f\t%f\n", kps[0], kps[1], kps[2]);
+        //     // }
+        //     // if(k < 2)// draw lines
+        //     // {
+        //     //     auto& ske    = SKELETON[k];
+        //     //     int   pos1_x = std::round(kps[(ske[0] ) * 2]);
+        //     //     int   pos1_y = std::round(kps[(ske[0] ) * 2 + 1]);
+
+        //     //     int pos2_x = std::round(kps[(ske[1] ) * 2]);
+        //     //     int pos2_y = std::round(kps[(ske[1] ) * 2 + 1]);
+        //     //     cv::Scalar limb_color = cv::Scalar(LIMB_COLORS[k][0], LIMB_COLORS[k][1], LIMB_COLORS[k][2]);
+        //     //     cv::line(res, {pos1_x, pos1_y}, {pos2_x, pos2_y}, limb_color, 2);
+        //     // }
+        //     // auto& ske    = SKELETON[k];
+        //     // int   pos1_x = std::round(kps[(ske[0] ) * 2]);
+        //     // int   pos1_y = std::round(kps[(ske[0] ) * 2 + 1]);
+
+        //     // int pos2_x = std::round(kps[(ske[1] ) * 2]);
+        //     // int pos2_y = std::round(kps[(ske[1] ) * 2 + 1]);
+
+        //     // // float pos1_s = kps[(ske[0] ) * 3 + 2];
+        //     // // float pos2_s = kps[(ske[1] ) * 3 + 2];
+
+        //     // // if (pos1_s > 0.5f && pos2_s > 0.5f) {
+        //     //     cv::Scalar limb_color = cv::Scalar(LIMB_COLORS[k][0], LIMB_COLORS[k][1], LIMB_COLORS[k][2]);
+        //     //     cv::line(res, {pos1_x, pos1_y}, {pos2_x, pos2_y}, limb_color, 2);
+        //     // // }
+        // }
     }
 }
 

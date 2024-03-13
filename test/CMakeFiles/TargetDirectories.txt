@@ -1,0 +1,9 @@
+/home/nvidia/Projects/EnergyMachine/test/CMakeFiles/rebuild_cache.dir
+/home/nvidia/Projects/EnergyMachine/test/CMakeFiles/edit_cache.dir
+/home/nvidia/Projects/EnergyMachine/test/CMakeFiles/yolov8-pose.dir
+/home/nvidia/Projects/EnergyMachine/test/camera/CMakeFiles/rebuild_cache.dir
+/home/nvidia/Projects/EnergyMachine/test/camera/CMakeFiles/edit_cache.dir
+/home/nvidia/Projects/EnergyMachine/test/camera/CMakeFiles/camera.dir
+/home/nvidia/Projects/EnergyMachine/test/assert/CMakeFiles/edit_cache.dir
+/home/nvidia/Projects/EnergyMachine/test/assert/CMakeFiles/rebuild_cache.dir
+/home/nvidia/Projects/EnergyMachine/test/assert/CMakeFiles/timer.dir

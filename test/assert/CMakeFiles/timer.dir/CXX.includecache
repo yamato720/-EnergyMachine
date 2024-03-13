@@ -1,0 +1,22 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/nvidia/Projects/EnergyMachine/assert/Timer/Timer.cpp
+Timer.h
+/home/nvidia/Projects/EnergyMachine/assert/Timer/Timer.h
+
+/home/nvidia/Projects/EnergyMachine/assert/Timer/Timer.h
+iostream
+-
+chrono
+-
+ctime
+-
+time.h
+-
+

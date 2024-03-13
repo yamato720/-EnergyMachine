@@ -55,6 +55,7 @@ add_executable(${PROJECT_NAME}
         main.cpp
         include/yolov8-pose.hpp 
         include/common.hpp
+        include/obj.hpp
         ${SRCS}
         )
 
